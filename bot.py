@@ -4,9 +4,13 @@ from google import genai
 import random
 import os
 
-# 1. 填滿 7 隻大腦的超級游泳池 🏊‍♂️
+# 1. 讀取 Railway 的環境變數（把漏掉的 DISCORD_TOKEN 補回來了！）
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+
+# 填滿 7 隻大腦的超級游泳池 🏊‍♂️
 API_KEYS_POOL = [
-    os.environ.get("GEMINI_API_KEY"),  # 第一隻（預設讀取 Railway 變數）
+    GEMINI_API_KEY,  # 第一隻（預設讀取 Railway 變數）
     "AQ.Ab8RN6K3lmSREmRJIkA-83uUrMGSpkDcL_TFIcqHF9FdmwmCEQ",
     "AQ.Ab8RN6Ix_glXsXhAOZeA_1F8U66CoUoTM71y5G8cmFgjEBSG7g",
     "AQ.Ab8RN6Ln0sQuc4d5M2WGHZ5rn1lVAwar8b_7xkMI53kc6AXdzA",
