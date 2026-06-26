@@ -4,18 +4,42 @@ from google import genai
 import random
 import os
 
-# 1. 讀取 Railway 環境變數
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+# 1. 填滿 7 隻大腦的超級游泳池 🏊‍♂️
+API_KEYS_POOL = [
+    os.environ.get("GEMINI_API_KEY"),  # 第一隻（預設讀取 Railway 變數）
+    "AQ.Ab8RN6K3lmSREmRJIkA-83uUrMGSpkDcL_TFIcqHF9FdmwmCEQ",
+    "AQ.Ab8RN6Ix_glXsXhAOZeA_1F8U66CoUoTM71y5G8cmFgjEBSG7g",
+    "AQ.Ab8RN6Ln0sQuc4d5M2WGHZ5rn1lVAwar8b_7xkMI53kc6AXdzA",
+    "AQ.Ab8RN6J9uj1y_M-VC5PV8Du1wMHxuXzuKln1UdX53ZIoYYf6FA",
+    "AQ.Ab8RN6JkVmtHJkZkV1EM5UBtwPJ18PoALe3hKZcOasGa7z0PYg",
+    "AQ.Ab8RN6JM97GfACMqDIsjamCI58qTZrSAP04aWRAj5LjpgD-1ZA"
+]
 
-# 初始化 Gemini 客戶端
-client = genai.Client(api_key=GEMINI_API_KEY)
+# 清理空金鑰
+API_KEYS_POOL = [k for k in API_KEYS_POOL if k]
+current_key_index = 0
+
+# 初始化第一個 Gemini 客戶端
+client = genai.Client(api_key=API_KEYS_POOL[current_key_index])
+
+def switch_next_api_key():
+    """當目前的 API 噴 429 時，自動順延切換到下一隻金鑰"""
+    global current_key_index, client
+    if not API_KEYS_POOL:
+        print("❌ 警告：沒有可用的 Gemini API 金鑰！")
+        return
+        
+    current_key_index = (current_key_index + 1) % len(API_KEYS_POOL)
+    next_key = API_KEYS_POOL[current_key_index]
+    
+    client = genai.Client(api_key=next_key)
+    print(f"🔄 偵測到額度限制！亞亞的大腦已自動切換到第 {current_key_index + 1} 隻金鑰 ({next_key[:12]}...)")
 
 # 設定 Discord 機器人權限
 intents = discord.Intents.default()
-intents.message_content = True  # 讀取訊息內容權限
-intents.members = True          # 讀取成員列表權限
-intents.presences = True        # 讀取狀態權限
+intents.message_content = True
+intents.members = True
+intents.presences = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -41,12 +65,10 @@ SYSTEM_INSTRUCTION = """
 - 每次回覆字數嚴格控制在 50 到 60 字以內，絕對不要長篇大論（因為你很懶得打字、隨時想躺平）。
 """
 
-# 2. 定時活躍機制：每 10 分鐘主動開擺、要大冰奶
-@tasks.loop(minutes=720)
+# 2. 定時活躍機制：每 12 小時主動開擺
+@tasks.loop(hours=12)
 async def active_chatting():
-    # 💡 你的真實「# 聊天」頻道 ID
     TARGET_CHANNEL_ID = 1316716430783418418 
-    
     channel = bot.get_channel(TARGET_CHANNEL_ID) 
     if channel:
         topics = [
@@ -57,73 +79,81 @@ async def active_chatting():
         ]
         prompt_topic = random.choice(topics)
         
-        try:
-            response = client.interactions.create(
-                model="gemini-3.5-flash",
-                input=f"{SYSTEM_INSTRUCTION}\n\n請根據你的人設，主動在群組發一則動態。當前狀態：{prompt_topic}"
-            )
-            await channel.send(response.output_text)
-        except Exception as e:
-            print(f"定時發話失敗：{e}")
+        for _ in range(len(API_KEYS_POOL)):
+            try:
+                response = client.interactions.create(
+                    model="gemini-3.5-flash",
+                    input=f"{SYSTEM_INSTRUCTION}\n\n請根據你的人設，主動在群組發一則動態。當前狀態：{prompt_topic}"
+                )
+                await channel.send(response.output_text)
+                break
+            except Exception as e:
+                if "429" in str(e):
+                    switch_next_api_key()
+                else:
+                    print(f"定時發話非 429 錯誤：{e}")
+                    break
 
 @bot.event
 async def on_ready():
-    print(f"🤖 揖代亞亞已成功上線！")
+    print(f"🤖 揖代亞亞已成功上線！當前總共有 {len(API_KEYS_POOL)} 隻金鑰輪替中。")
     if not active_chatting.is_running():
         active_chatting.start()
 
-# 3. 監聽訊息：群組 Tag、隨機插嘴、以及「私訊不用 @ 秒回」
+# 3. 監聽訊息：群組 Tag、隨機插嘴、以及私訊秒回
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
-    # 🔍 判斷訊息是不是來自「私訊 (DM)」
     is_dm = isinstance(message.channel, discord.DMChannel)
-
-    # 群組內的觸發條件
     is_mentioned = bot.user.mentioned_in(message)
     random_interact = random.random() < 0.05 
 
-    # 💡 核心邏輯修改：只要是私訊，或者群組內被標記/抽中隨機插嘴，就馬上回覆！
     if is_dm or is_mentioned or random_interact:
         async with message.channel.typing():
-            try:
-                # 取得傳送者的各類名稱
-                username = message.author.name.lower()
-                display_name = message.author.display_name.lower()
-                
-                # 🔍 精準偵測老爹的 ID
-                if "anew_dream" in username or "anewdream" in username or "anew_dream" in display_name:
-                    identity_prompt = "【重要指令】當前跟你對話的人是你的「老爹」（百億創作者老爹）。你必須叫他「老爹」，對他可以非常毒舌、傲嬌、撒嬌要大冰奶或大開擺，但要表現出相愛相殺的父女感。"
-                else:
-                    identity_prompt = f"【重要指令】當前跟你對話的人是普通粉絲/群友，名字叫「{message.author.display_name}」。你要保持高冷、傲嬌、毒舌的 VTuber 態度對待他。"
+            # 迴圈重試：當金鑰掛掉，立刻切換下一隻，直到把所有金鑰試過一輪
+            for attempt in range(len(API_KEYS_POOL)):
+                try:
+                    username = message.author.name.lower()
+                    display_name = message.author.display_name.lower()
+                    
+                    if "anew_dream" in username or "anewdream" in username or "anew_dream" in display_name:
+                        identity_prompt = "【重要指令】當前跟你對話的人是你的「老爹」（百億創作者老爹）。你必須叫他「老爹」，對他可以非常毒舌、傲嬌、撒嬌要大冰奶或大開擺，但要表現出相愛相殺的父女感。"
+                    else:
+                        identity_prompt = f"【重要指令】當前跟你對話的人是普通粉絲/群友，名字叫「{message.author.display_name}」。你要保持高冷、傲嬌、毒舌的 VTuber 態度對待他。"
 
-                # 區分私訊與公開群組的情境提醒
-                context_prompt = "【情境】這是私訊小盒子對話，請直接回覆他。" if is_dm else "【情境】這是公開群組對話。"
+                    context_prompt = "【情境】這是私訊小盒子對話，請直接回覆他。" if is_dm else "【情境】這是公開群組對話。"
 
-                full_prompt = (
-                    f"{SYSTEM_INSTRUCTION}\n\n"
-                    f"{identity_prompt}\n\n"
-                    f"{context_prompt}\n\n"
-                    f"對話內容：『{message.content}』\n"
-                    f"請直接給予最符合人設的簡短神回覆（限 60 字內）："
-                )
+                    full_prompt = (
+                        f"{SYSTEM_INSTRUCTION}\n\n"
+                        f"{identity_prompt}\n\n"
+                        f"{context_prompt}\n\n"
+                        f"對話內容：『{message.content}』\n"
+                        f"請直接給予最符合人設的簡短神回覆（限 60 字內）："
+                    )
 
-                # 呼叫 Gemini API
-                response = client.interactions.create(
-                    model="gemini-3.5-flash",
-                    input=full_prompt
-                )
-                
-                await message.reply(response.output_text)
-                
-            except Exception as e:
-                print(f"呼叫 Gemini API 錯誤：{e}")
-                if is_dm:
-                    await message.reply("嘖，大腦卡住了啦！...才、才不是故意不回你呢。")
-                else:
-                    await message.reply("嘖，大腦卡住了啦老爹！是不是沒給我喝大冰奶的關係？")
+                    response = client.interactions.create(
+                        model="gemini-3.5-flash",
+                        input=full_prompt
+                    )
+                    
+                    await message.reply(response.output_text)
+                    return # 成功回覆，退出
+                    
+                except Exception as e:
+                    print(f"第 {current_key_index + 1} 隻金鑰發生錯誤: {e}")
+                    if "429" in str(e):
+                        switch_next_api_key()
+                        continue # 用新金鑰進入下一次重試
+                    else:
+                        if is_dm:
+                            await message.reply("嘖，大腦卡住了啦！...才、才不是故意不回你呢。")
+                        else:
+                            await message.reply("嘖，大腦卡住了啦老爹！是不是沒給我喝大冰奶的關係？")
+                        return
+
+            await message.reply("哈？老爹你給的 7 隻金鑰全部被我刷爆了啦！全部都在大腦卡住，等一下再找我！")
 
     await bot.process_commands(message)
 
