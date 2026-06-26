@@ -24,7 +24,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def active_chatting():
     # 💡 記得把這裡的 123456789012345678 改成你想讓 AI 主動說話的「Discord 頻道 ID」
     # 在 Discord 頻道上按右鍵複製 ID 即可
-    TARGET_CHANNEL_ID = 123456789012345678 
+    TARGET_CHANNEL_ID = 1316716430783418418
     
     channel = bot.get_channel(TARGET_CHANNEL_ID) 
     if channel:
