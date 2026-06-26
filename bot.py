@@ -42,10 +42,10 @@ SYSTEM_INSTRUCTION = """
 """
 
 # 2. 定時活躍機制：每 30 分鐘主動開擺、要大冰奶
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=10)
 async def active_chatting():
     # 💡 記得把這裡改成你「# 聊天」頻道的真實 ID
-    TARGET_CHANNEL_ID = 123456789012345678 
+    TARGET_CHANNEL_ID = 1316716430783418418 
     
     channel = bot.get_channel(TARGET_CHANNEL_ID) 
     if channel:
